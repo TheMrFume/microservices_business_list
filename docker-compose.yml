@@ -1,0 +1,69 @@
+version: '3'
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql_container
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DB}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app_network
+
+  businesses:
+    image: tiangolo/uvicorn-gunicorn-fastapi:python3.9  # Same FastAPI-ready image
+    build: ./microservices/businesses
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql
+    networks:
+      - app_network
+    env_file:
+      - .env
+
+  lists:
+    image: tiangolo/uvicorn-gunicorn-fastapi:python3.9  # Same FastAPI-ready image
+    build: ./microservices/lists
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    ports:
+      - "8001:8000"
+    depends_on:
+      - mysql
+    networks:
+      - app_network
+    env_file:
+      - .env
+
+  composite:
+    image: tiangolo/uvicorn-gunicorn-fastapi:python3.9  # Same FastAPI-ready image
+    build: ./microservices/composite
+    environment:
+      - BUSINESS_SERVICE_URL=${BUSINESS_SERVICE_URL}
+      - LIST_SERVICE_URL=${LIST_SERVICE_URL}
+      - DATABASE_URL=${DATABASE_URL}
+    ports:
+      - "8002:8000"
+    depends_on:
+      - businesses
+      - lists
+      - mysql
+    networks:
+      - app_network
+    env_file:
+      - .env
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
