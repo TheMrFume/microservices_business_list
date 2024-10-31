@@ -6,11 +6,14 @@ import os
 import orchestrator
 import crud, models, schema
 from database import SessionLocal, engine
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
+import set_env
 
+"""
 # Load environment variables from .env
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', ".env")
 load_dotenv(dotenv_path)
+"""
 
 # Create tables -> Don't need to, tables already created
 # models.Base.metadata.create_all(bind=engine)
