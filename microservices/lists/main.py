@@ -11,7 +11,7 @@ import os
 dotenv_path = os.path.join(os.path.dirname(__file__), '..', ".env")
 load_dotenv(dotenv_path)
 
-app = FastAPI()
+app = FastAPI(debug=True)
 
 # Setup CORS using environment variables, if needed
 app.add_middleware(

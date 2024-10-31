@@ -15,7 +15,7 @@ load_dotenv(dotenv_path)
 # Create tables -> Don't need to, tables already created
 # models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(debug=True)
 
 # Setup CORS using environment variables, if needed
 app.add_middleware(
@@ -36,12 +36,12 @@ def get_db():
 
 # Queue Management Endpoints
 @app.post("/queue/start/")
-async def start_queue(location: str):
+async def start_queue(address: str):
     """
-    Initializes the business queue with businesses from the specified location.
+    Initializes the business queue with businesses from the specified address.
     """
     try:
-        await orchestrator.start_business_queue(location)
+        await orchestrator.start_business_queue(address)
         return {"message": "Business queue started successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -71,7 +71,7 @@ async def get_next_business():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/queue/add-or-remove-business/")
-async def add_or_remove_business(user_id: int, business_id: int, list_id: int, location: str, day: str, action: str, db: Session = Depends(get_db)):
+async def add_or_remove_business(user_id: int, business_id: int, list_id: int, address: str, day: str, action: str, db: Session = Depends(get_db)):
     """
     Adds or removes a business from the queue depending on the action specified.
     - If action is "add", the business is added to the user's list as an itinerary.
@@ -79,10 +79,10 @@ async def add_or_remove_business(user_id: int, business_id: int, list_id: int, l
     """
     try:
         if action == "add":
-            await orchestrator.add_business_to_user_list(db=db, user_id=user_id, business_id=business_id, list_id=list_id, location=location, day=day)
+            await orchestrator.add_business_to_user_list(db=db, user_id=user_id, business_id=business_id, list_id=list_id, address=address, day=day)
             return {"message": "Business added to user's list and removed from queue"}
         elif action == "remove":
-            await orchestrator.remove_business_from_queue(business_id=business_id, location=location)
+            await orchestrator.remove_business_from_queue(business_id=business_id, address=address)
             return {"message": "Business removed from queue"}
         else:
             raise HTTPException(status_code=400, detail="Invalid action specified. Use 'add' or 'remove'.")

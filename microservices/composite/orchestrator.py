@@ -18,12 +18,12 @@ business_queue = deque()
 # Constants
 QUEUE_SIZE = 5  # Desired queue size for maintaining a list of businesses
 
-async def start_business_queue(location: str):
+async def start_business_queue(address: str):
     """
-    Initializes the business queue with businesses from the specified location.
+    Initializes the business queue with businesses from the specified address.
     """
     async with httpx.AsyncClient() as client:
-        response = await client.get(f"{BUSINESS_SERVICE_URL}?location={location}&limit={QUEUE_SIZE}")
+        response = await client.get(f"{BUSINESS_SERVICE_URL}?address={address}&limit={QUEUE_SIZE}")
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch businesses")
 
@@ -32,7 +32,7 @@ async def start_business_queue(location: str):
             business_queue.append(business)
 
     # Ensure the queue always has enough items
-    await maintain_queue(location)
+    await maintain_queue(address)
 
 async def end_business_queue():
     """
@@ -40,7 +40,7 @@ async def end_business_queue():
     """
     business_queue.clear()
 
-async def maintain_queue(location: str):
+async def maintain_queue(address: str):
     """
     Ensures that the business queue always has at least QUEUE_SIZE items.
     Avoids adding duplicate businesses.
@@ -50,7 +50,7 @@ async def maintain_queue(location: str):
     if len(business_queue) < QUEUE_SIZE:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{BUSINESS_SERVICE_URL}?location={location}&limit={QUEUE_SIZE - len(business_queue)}")
+                f"{BUSINESS_SERVICE_URL}?address={address}&limit={QUEUE_SIZE - len(business_queue)}")
             if response.status_code == 200:
                 new_businesses = response.json()
                 for business in new_businesses:
@@ -66,10 +66,10 @@ async def get_next_business():
         raise HTTPException(status_code=404, detail="No more businesses available in the queue")
 
     next_business = business_queue.popleft()  # Get the next business
-    await maintain_queue(next_business.get("location", "default"))  # Use location to refill queue if needed
+    await maintain_queue(next_business.get("address", "default"))  # Use address to refill queue if needed
     return next_business
 
-async def add_business_to_user_list(db: Session, user_id: int, business_id: int, list_id: int, location: str, day: str):
+async def add_business_to_user_list(db: Session, user_id: int, business_id: int, list_id: int, address: str, day: str):
     """
     Adds a business to a user's list (itinerary) and removes it from the queue.
     Ensures the queue size remains stable.
@@ -86,10 +86,10 @@ async def add_business_to_user_list(db: Session, user_id: int, business_id: int,
     crud.create_itinerary(db=db, itinerary_data=itinerary_data)  # Use .dict() to convert Pydantic model to dictionary
 
     # Remove the business from the queue and maintain the queue size
-    await remove_business_from_queue(business_id, location)
-    await maintain_queue(location)
+    await remove_business_from_queue(business_id, address)
+    await maintain_queue(address)
 
-async def remove_business_from_queue(business_id: int, location: str):
+async def remove_business_from_queue(business_id: int, address: str):
     """
     Removes a specific business from the queue (e.g., if user skips it).
     Calls maintain_queue to ensure the queue size remains stable.
@@ -101,7 +101,7 @@ async def remove_business_from_queue(business_id: int, location: str):
             break  # Exit once the business is removed
 
     # Refill the queue if necessary
-    await maintain_queue(location)
+    await maintain_queue(address)
 
 def generate_time_blocks(start_time="09:00", interval_minutes=120, count=7):
     """

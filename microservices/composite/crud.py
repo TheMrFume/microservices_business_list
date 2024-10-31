@@ -4,7 +4,7 @@ import schema
 from datetime import datetime, timedelta
 
 def create_itinerary(db: Session, itinerary_data: schema.ItineraryCreate):
-    db_itinerary = models.Itinerary(**itinerary_data.dict())
+    db_itinerary = models.Itinerary(**itinerary_data.model_dump())
     db.add(db_itinerary)
     db.commit()
     db.refresh(db_itinerary)
