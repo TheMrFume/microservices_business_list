@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 #from dotenv import load_dotenv
 import set_env
 import os
+import uvicorn
 
 """
 # Load environment variables from .env
@@ -56,3 +57,7 @@ def update_business(business_id: int, business_data: schemas.BusinessUpdate, db:
     if updated_business is None:
         raise HTTPException(status_code=404, detail="Business not found")
     return updated_business
+
+# Run the application with Uvicorn
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

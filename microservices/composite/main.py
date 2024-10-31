@@ -8,6 +8,7 @@ import crud, models, schema
 from database import SessionLocal, engine
 #from dotenv import load_dotenv
 import set_env
+import uvicorn
 
 """
 # Load environment variables from .env
@@ -133,3 +134,7 @@ def delete_itinerary(itinerary_id: int, db: Session = Depends(get_db)):
     if itinerary is None:
         raise HTTPException(status_code=404, detail="Itinerary not found")
     return itinerary
+
+# Run the application with Uvicorn
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
