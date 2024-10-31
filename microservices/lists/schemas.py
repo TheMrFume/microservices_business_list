@@ -1,6 +1,11 @@
 from pydantic import BaseModel
 from typing import Optional, List as PydanticList
-from microservices.composite.schema import Itinerary
+import sys, os
+
+# Add the path to the module you want to import
+module_path = os.path.abspath(os.path.join('../', 'composite'))
+sys.path.append(module_path)
+from schema import Itinerary
 
 class ListBase(BaseModel):
     creator_id: int
@@ -16,4 +21,4 @@ class List(ListBase):
     itineraries: PydanticList[Itinerary] = []  # List of associated Itinerary entries (businesses with order) for each day
 
     class Config:
-        orm_mode = True
+        from_attributes = True
