@@ -1,3 +1,5 @@
+from urllib.request import Request
+
 from fastapi import FastAPI, HTTPException, Depends
 from typing import List, Optional
 import crud
@@ -5,6 +7,9 @@ import database
 import schemas
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+import logging
+import time
 #from dotenv import load_dotenv
 import set_env
 import os
@@ -18,14 +23,19 @@ load_dotenv(dotenv_path)
 
 app = FastAPI(debug=True)
 
-# Setup CORS using environment variables, if needed
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Custom Logging Middleware
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        logging.info(
+            f"Request: {request.method} {request.url} - "
+            f"Response: {response.status_code} - Time: {process_time:.4f}s"
+        )
+        return response
+
+app.add_middleware(LoggingMiddleware)
 
 # Dependency to get a database session
 def get_db():
@@ -42,8 +52,32 @@ def create_business(business: schemas.BusinessCreate, db: Session = Depends(get_
 @app.get("/businesses/", response_model=List[schemas.Business])
 def get_businesses(skip: int = 0, limit: int = 10, address: Optional[str] = None, db: Session = Depends(get_db)):
     businesses = crud.get_businesses(db, skip=skip, limit=limit, address=address)
-    return businesses
+    business_list = [
+        {
+            **business.__dict__,
+            "links": {
+                "self": f"/businesses/{business.business_id}",
+                "update": f"/businesses/{business.business_id}",
+                "delete": f"/businesses/{business.business_id}",
+            },
+        }
+        for business in businesses
+    ]
+    return {"data": business_list}
 
+@app.get("/businesses/{business_id}", response_model=schemas.Business)
+def get_business(business_id: int, db: Session = Depends(get_db)):
+    business = crud.get_business(db, business_id=business_id)
+    if business is None:
+        raise HTTPException(status_code=404, detail="Business not found")
+    return {
+        **business.__dict__,
+        "links": {
+            "self": f"/businesses/{business.business_id}",
+            "update": f"/businesses/{business.business_id}",
+            "delete": f"/businesses/{business.business_id}",
+        },
+    }
 @app.delete("/businesses/{business_id}", response_model=schemas.Business)
 def delete_business(business_id: int, db: Session = Depends(get_db)):
     business = crud.delete_business(db=db, business_id=business_id)
