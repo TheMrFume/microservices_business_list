@@ -82,34 +82,32 @@ async def root():
 
 @app.post("/businesses/", response_model=schemas.Business, status_code=201)
 def create_business(
-    business: schemas.BusinessCreate,  # Accept the request body as a Pydantic model
+    business_name: str,
+    location: str,
+    address: str,
+    category: str,
+    description: str,
     db: Session = Depends(get_db)
 ):
-    # Create a business using the input data
+    # Call the CRUD function to create the business
     business_data = schemas.BusinessCreate(
-        business_name=business.business_name,
-        location=business.location,
-        address=business.address,
-        category=business.category,
-        description=business.description,
+        business_name=business_name,
+        location=location,
+        address=address,
+        category=category,
+        description=description
     )
-    return crud.create_business(db=db, business=business_data)
+    created_business = crud.create_business(db=db, business_data=business_data)
+    return created_business
 
 
 @app.get("/businesses/{business_id}", response_model=schemas.Business)
-def get_business(business_id: int, db: Session = Depends(get_db), request: Request = None):
-    correlation_id = request.state.correlation_id
-    business = crud.get_business(db, business_id=business_id, correlation_id=correlation_id)
+def get_business(business_id: int, db: Session = Depends(get_db)):
+    #correlation_id = request.state.correlation_id
+    business = crud.get_business(db, business_id=business_id)
     if business is None:
         raise HTTPException(status_code=404, detail="Business not found")
-    return {
-        **business.__dict__,
-        "links": {
-            "self": f"/businesses/{business.business_id}",
-            "update": f"/businesses/{business.business_id}",
-            "delete": f"/businesses/{business.business_id}",
-        },
-    }
+    return business
 @app.delete("/businesses/{business_id}", response_model=schemas.Business)
 def delete_business(business_id: int, db: Session = Depends(get_db), request: Request = None):
     correlation_id = request.state.correlation_id
@@ -126,11 +124,19 @@ def update_business(business_id: int, business_data: schemas.BusinessUpdate, db:
         raise HTTPException(status_code=404, detail="Business not found")
     return updated_business
 
-@app.get("/businesses/next", response_model=schemas.Business)
-def get_next_business(list_id: int, location: str, db: Session = Depends(get_db)):
-    next_business = crud.get_next_business(db=db, list_id=list_id, location=location)
+@app.get("/businesses/next/", response_model=schemas.Business)
+def get_next_business(
+    location: str,
+    existing_ids: str,
+    db: Session = Depends(get_db)
+):
+    existing_ids_list = list(map(int, existing_ids.split(",")))
+    next_business = crud.get_next_business(db=db, location=location, existing_ids=existing_ids_list)
     if next_business is None:
-        raise HTTPException(status_code=500, detail="No business found at the location that is not in the list.")
+        raise HTTPException(
+            status_code=404,
+            detail="No business found at the location that is not in the list."
+        )
     return next_business
 
 # Run the application with Uvicorn

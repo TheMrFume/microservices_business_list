@@ -1,3 +1,4 @@
+"""
 import asyncio
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -138,6 +139,85 @@ def serve_next(list_id: int, location: str, request: Request):
 
     return next_business_response.json()
 
+
+# Run the application with Uvicorn
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8003, reload=True)
+"""
+import asyncio
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+import time
+import logging
+from fastapi.responses import Response
+import uvicorn
+import httpx
+import os
+
+app = FastAPI(debug=True, redirect_slashes=False)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("tracing.log"),  # Log to a file
+        logging.StreamHandler(),            # Log to the console
+    ],
+)
+
+# Configuration for microservice URLs
+BUSINESS_SERVICE_URL = "http://localhost:8002/businesses"
+LIST_SERVICE_URL = "http://localhost:8001/lists"
+
+# View Full List - Asynchronous Composite Endpoint
+@app.get("/composite/view_full_list", response_model=List[dict])
+async def view_full_list(list_id: int):
+    async with httpx.AsyncClient() as client:
+        # Step 1: Get all business_ids from the list microservice
+        list_url = f"{LIST_SERVICE_URL}/{list_id}/itineraries/"
+        list_response = await client.get(list_url)
+        if list_response.status_code != 200:
+            raise HTTPException(status_code=list_response.status_code, detail="Failed to fetch business IDs.")
+
+        business_ids = [item["business_id"] for item in list_response.json()]
+
+        # Step 2: Fetch business details asynchronously from the business microservice
+        tasks = [client.get(f"{BUSINESS_SERVICE_URL}/{business_id}") for business_id in business_ids]
+        responses = await asyncio.gather(*tasks)
+
+        # Step 3: Compile the details for valid responses
+        businesses = [response.json() for response in responses if response.status_code == 200]
+
+    return businesses
+
+# Serve Next - Synchronous Composite Endpoint
+@app.get("/composite/serve_next", response_model=dict)
+def serve_next(list_id: int, location: str):
+    """
+    Fetches businesses already in the list and requests the next business from the businesses microservice.
+    """
+    with httpx.Client(follow_redirects=True) as client:
+        # Step 1: Get all business_ids from the list microservice
+        list_url = f"{LIST_SERVICE_URL}/{list_id}/itineraries/"
+        list_response = client.get(list_url)
+
+        if list_response.status_code != 200:
+            raise HTTPException(status_code=list_response.status_code, detail="Failed to fetch business IDs.")
+
+        existing_business_ids = [item["business_id"] for item in list_response.json()]
+        # Step 2: Request the next business from the business microservice
+        next_business_url = f"{BUSINESS_SERVICE_URL}/next/"
+        params = {
+            "location": location,
+            "existing_ids": ",".join(map(str, existing_business_ids))  # Send IDs as a comma-separated string
+        }
+        next_business_response = client.get(next_business_url, params=params)
+
+        if next_business_response.status_code != 200:
+            raise HTTPException(status_code=next_business_response.status_code, detail="No next business found.")
+
+    return next_business_response.json()
 
 # Run the application with Uvicorn
 if __name__ == "__main__":
