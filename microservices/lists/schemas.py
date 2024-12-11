@@ -1,24 +1,36 @@
 from pydantic import BaseModel
-from typing import Optional, List as PydanticList
-import sys, os
-
-# Add the path to the module you want to import
-module_path = os.path.abspath(os.path.join('../', 'composite'))
-sys.path.append(module_path)
-from schema import Itinerary
+from typing import Optional
 
 class ListBase(BaseModel):
-    creator_id: int
+    user_id: int
+    location: str
+    date: str
+    description: Optional[str] = None
 
 class ListCreate(ListBase):
-    pass  # Only creator_id is required for creating a list
-
-class ListUpdate(BaseModel):
-    creator_id: Optional[int] = None  # Allow updating creator ID
+    pass
 
 class List(ListBase):
     list_id: int
-    itineraries: PydanticList[Itinerary] = []  # List of associated Itinerary entries (businesses with order) for each day
 
     class Config:
-        from_attributes = True
+        orm_mode = True
+
+class ListUpdate(BaseModel):
+    location: Optional[str] = None
+    description: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+class ItineraryBase(BaseModel):
+    list_id: int
+    business_id: int
+
+class ItineraryCreate(ItineraryBase):
+    pass
+
+class Itinerary(ItineraryBase):
+
+    class Config:
+        orm_mode = True
