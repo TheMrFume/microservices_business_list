@@ -139,7 +139,10 @@ def get_next_business(
     existing_ids: str,
     db: Session = Depends(get_db)
 ):
-    existing_ids_list = list(map(int, existing_ids.split(",")))
+    existing_ids_list = []
+    if existing_ids!="*":
+        existing_ids_list = list(map(int, existing_ids.split(",")))
+
     next_business = crud.get_next_business(db=db, location=location, existing_ids=existing_ids_list)
     if next_business is None:
         raise HTTPException(

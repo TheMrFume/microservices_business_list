@@ -146,6 +146,7 @@ if __name__ == "__main__":
 """
 import asyncio
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 import time
@@ -156,6 +157,15 @@ import httpx
 import os
 
 app = FastAPI(debug=True, redirect_slashes=False)
+
+# Setup CORS using environment variables, if needed
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -206,12 +216,22 @@ def serve_next(list_id: int, location: str):
             raise HTTPException(status_code=list_response.status_code, detail="Failed to fetch business IDs.")
 
         existing_business_ids = [item["business_id"] for item in list_response.json()]
-        # Step 2: Request the next business from the business microservice
-        next_business_url = f"{BUSINESS_SERVICE_URL}/next/"
+
         params = {
             "location": location,
-            "existing_ids": ",".join(map(str, existing_business_ids))  # Send IDs as a comma-separated string
+            "existing_ids": "*"
         }
+
+        if existing_business_ids:
+            params = {
+                "location": location,
+                "existing_ids": ",".join(map(str, existing_business_ids))  # Send IDs as a comma-separated string
+            }
+
+
+
+        # Step 2: Request the next business from the business microservice
+        next_business_url = f"{BUSINESS_SERVICE_URL}/next/"
         next_business_response = client.get(next_business_url, params=params)
 
         if next_business_response.status_code != 200:
