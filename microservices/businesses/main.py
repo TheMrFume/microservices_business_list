@@ -25,6 +25,15 @@ load_dotenv(dotenv_path)
 
 app = FastAPI(debug=True)
 
+# Setup CORS using environment variables, if needed
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ALLOW_ORIGINS", "*").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 logging.basicConfig(
     level=logging.INFO,
