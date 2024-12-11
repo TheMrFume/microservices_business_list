@@ -1,6 +1,7 @@
+import uuid
 from urllib.request import Request
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from typing import List, Optional
 import crud
 import database
@@ -8,6 +9,7 @@ import schemas
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 import logging
 import time
 #from dotenv import load_dotenv
@@ -23,19 +25,47 @@ load_dotenv(dotenv_path)
 
 app = FastAPI(debug=True)
 
-# Custom Logging Middleware
-class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("tracing.log"),  # Log to a file
+        logging.StreamHandler(),            # Log to the console
+    ],
+)
+
+# Custom Logging, Tracing, and Correlation ID Middleware
+class TracingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
+        request.state.correlation_id = correlation_id
+
+        # Start timing the request
         start_time = time.time()
+
+        # Log request details
+        logging.info(f"Request Start: {request.method} {request.url}")
+        logging.info(f"Correlation ID: {correlation_id} - {request.method} {request.url}")
+        logging.info(f"Headers: {request.headers}")
+        if request.method in ["POST", "PUT", "PATCH"]:
+            body = await request.body()
+            logging.info(f"Body: {body.decode('utf-8') if body else None}")
+
+        # Process the request and get the response
         response = await call_next(request)
+        response.headers["X-Correlation-ID"] = correlation_id
+
+        # End timing and log response details
         process_time = time.time() - start_time
         logging.info(
-            f"Request: {request.method} {request.url} - "
-            f"Response: {response.status_code} - Time: {process_time:.4f}s"
+            f"Request End: {request.method} {request.url} - "
+            f"Status Code: {response.status_code} - Time: {process_time:.4f}s"
         )
+
         return response
 
-app.add_middleware(LoggingMiddleware)
+app.add_middleware(TracingMiddleware)
 
 # Dependency to get a database session
 def get_db():
@@ -45,29 +75,31 @@ def get_db():
     finally:
         db.close()
 
-@app.post("/businesses/", response_model=schemas.Business)
-def create_business(business: schemas.BusinessCreate, db: Session = Depends(get_db)):
-    return crud.create_business(db=db, business=business)
+@app.get("/")
+async def root():
+    return {"message": "Tracing middleware is active!"}
 
-@app.get("/businesses/", response_model=List[schemas.Business])
-def get_businesses(skip: int = 0, limit: int = 10, address: Optional[str] = None, db: Session = Depends(get_db)):
-    businesses = crud.get_businesses(db, skip=skip, limit=limit, address=address)
-    business_list = [
-        {
-            **business.__dict__,
-            "links": {
-                "self": f"/businesses/{business.business_id}",
-                "update": f"/businesses/{business.business_id}",
-                "delete": f"/businesses/{business.business_id}",
-            },
-        }
-        for business in businesses
-    ]
-    return {"data": business_list}
+
+@app.post("/businesses/", response_model=schemas.Business, status_code=201)
+def create_business(
+    business: schemas.BusinessCreate,  # Accept the request body as a Pydantic model
+    db: Session = Depends(get_db)
+):
+    # Create a business using the input data
+    business_data = schemas.BusinessCreate(
+        business_name=business.business_name,
+        location=business.location,
+        address=business.address,
+        category=business.category,
+        description=business.description,
+    )
+    return crud.create_business(db=db, business=business_data)
+
 
 @app.get("/businesses/{business_id}", response_model=schemas.Business)
-def get_business(business_id: int, db: Session = Depends(get_db)):
-    business = crud.get_business(db, business_id=business_id)
+def get_business(business_id: int, db: Session = Depends(get_db), request: Request = None):
+    correlation_id = request.state.correlation_id
+    business = crud.get_business(db, business_id=business_id, correlation_id=correlation_id)
     if business is None:
         raise HTTPException(status_code=404, detail="Business not found")
     return {
@@ -79,19 +111,28 @@ def get_business(business_id: int, db: Session = Depends(get_db)):
         },
     }
 @app.delete("/businesses/{business_id}", response_model=schemas.Business)
-def delete_business(business_id: int, db: Session = Depends(get_db)):
-    business = crud.delete_business(db=db, business_id=business_id)
+def delete_business(business_id: int, db: Session = Depends(get_db), request: Request = None):
+    correlation_id = request.state.correlation_id
+    business = crud.delete_business(db=db, business_id=business_id, correlation_id=correlation_id)
     if business is None:
         raise HTTPException(status_code=404, detail="Business not found")
     return business
 
 @app.put("/businesses/{business_id}", response_model=schemas.Business)
-def update_business(business_id: int, business_data: schemas.BusinessUpdate, db: Session = Depends(get_db)):
-    updated_business = crud.update_business(db=db, business_id=business_id, business_data=business_data)
+def update_business(business_id: int, business_data: schemas.BusinessUpdate, db: Session = Depends(get_db), request: Request = None):
+    correlation_id = request.state.correlation_id
+    updated_business = crud.update_business(db=db, business_id=business_id, business_data=business_data, correlation_id=correlation_id)
     if updated_business is None:
         raise HTTPException(status_code=404, detail="Business not found")
     return updated_business
 
+@app.get("/businesses/next", response_model=schemas.Business)
+def get_next_business(list_id: int, location: str, db: Session = Depends(get_db)):
+    next_business = crud.get_next_business(db=db, list_id=list_id, location=location)
+    if next_business is None:
+        raise HTTPException(status_code=500, detail="No business found at the location that is not in the list.")
+    return next_business
+
 # Run the application with Uvicorn
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8002, reload=True)

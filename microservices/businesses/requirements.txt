@@ -3,3 +3,4 @@ sqlalchemy
 pymysql  # MySQL driver for SQLAlchemy
 python-dotenv  # For loading .env variables
 httpx  # For HTTP requests in the composite service
+uvicorn
